@@ -12,7 +12,9 @@ localization = pandas.read_csv('https://www.cl.cam.ac.uk/teaching/2223/DataSci/d
 localization.sort_values(['id','t'], inplace=True)
 
 # Pull out observations for the animal we want to track
+# observations = localization.loc[localization.id==0, ['r','g','b']].values
 observations = localization.loc[localization.id==0, ['r','g','b']].values
+real_locations = localization.loc[localization.id==0, ['x','y']].values
 
 df = localization
 
@@ -80,15 +82,6 @@ def patch(im, xy, size=3):
 
 # get data to fit the model
 locations, color = df.loc[df.id>0,['x','y']].values, df.loc[df.id>0,['r','g','b']].values
-y0 = np.array([patch(map_image, loc) for loc in locations])
-y0, y = matplotlib.colors.rgb_to_hsv(y0), matplotlib.colors.rgb_to_hsv(color)
-
-def logPr(x,p):
-    (μ,τ) = p
-    return np.log(scipy.stats.norm.pdf(x,loc=μ,scale=np.exp(τ)))
-
-train_data = np.split(y - y0,3,axis=1)
-params = [scipy.optimize.fmin(lambda p: -np.sum(logPr(train_data[i],p)), [0,0.1]) for i in range(3)]
 
 # fig,axs = plt.subplots(3,1, figsize=(10,4), sharex=True)
 # for i in range(3):
@@ -100,36 +93,43 @@ params = [scipy.optimize.fmin(lambda p: -np.sum(logPr(train_data[i],p)), [0,0.1]
 
 # probability of observing y at location loc
 def pr(y, loc):
-    y0,y = matplotlib.colors.rgb_to_hsv([patch(map_image,loc),y])
-    e = y - y0
-    return np.exp(np.sum([logPr(e[i],params[i]) for i in range(0,3)]))
+    σ = .05
+    # compute the closeness in hsv space
+    # convert to hsv
+    # y_h = matplotlib.colors.rgb_to_hsv(y)
+    # loc_h = matplotlib.colors.rgb_to_hsv(patch(map_image, loc, size=3))
+    # compute the distance
+    # dist = np.linalg.norm(y_h - loc_h)
+    dist = np.linalg.norm(y - patch(map_image, loc, size=3))
+    # compute the probability
+    return np.exp(-dist**2/(2*σ**2))
 
 y0 = observations[0]
 w = np.array([pr(y0, (x,y)) for x,y,_ in δ0])
 π0 = np.copy(δ0)
 π0[:,2] = w / np.sum(w)
 
-fig,(axδ,axπ) = plt.subplots(1,2, figsize=(8,4), sharex=True, sharey=True)
-show_particles(δ0, ax=axδ, s=600)
-show_particles(π0, ax=axπ, s=600)
-axπ.add_patch(matplotlib.patches.Rectangle((0,0),100,100,color=y0))
-axπ.text(50,50,'$y_0$', c='white', ha='center', va='center', fontsize=14)
-axδ.set_title('$X_0$')
-axπ.set_title('$(X_0|y_0)$')
-plt.show()
+# fig,(axδ,axπ) = plt.subplots(1,2, figsize=(8,4), sharex=True, sharey=True)
+# show_particles(δ0, ax=axδ, s=600)
+# show_particles(π0, ax=axπ, s=600)
+# axπ.add_patch(matplotlib.patches.Rectangle((0,0),100,100,color=y0))
+# axπ.text(50,50,'$y_0$', c='white', ha='center', va='center', fontsize=14)
+# axδ.set_title('$X_0$')
+# axπ.set_title('$(X_0|y_0)$')
+# plt.show()
 
 # calculate the average location change between consecutive observations in lenth
 diff = []
 for i in range(1,len(locations)):
     diff.append(np.linalg.norm(locations[i]-locations[i-1]))
 diff = np.mean(diff)
-print(f"Average location change between consecutive observations: {diff:.2f}")
+# print(f"Average location change between consecutive observations: {diff:.2f}")
 
 def walk(loc):
     # randomly choose a direction in [0, 2π)
     dir = np.random.uniform(0,2*np.pi)
     # randomly choose a distance with mean diff
-    dist = np.random.exponential(np.linalg.norm(diff))
+    dist = np.random.exponential(diff)
     # calculate new location
     new_loc = loc + dist*np.array([np.cos(dir), np.sin(dir)])
     # if new location is outside the map, limit it to the map boundary
@@ -138,35 +138,87 @@ def walk(loc):
     return new_loc
 
 # Sanity check
-loc = π0[0,:2]
-loc2 = walk(loc)
-assert len(loc2)==2 and isinstance(loc2[0], numbers.Number) and isinstance(loc2[1], numbers.Number)
-assert loc2[0]>=0 and loc2[0]<=W-1 and loc2[1]>=0 and loc2[1]<=H-1
+# loc = π0[0,:2]
+# loc2 = walk(loc)
+# assert len(loc2)==2 and isinstance(loc2[0], numbers.Number) and isinstance(loc2[1], numbers.Number)
+# assert loc2[0]>=0 and loc2[0]<=W-1 and loc2[1]>=0 and loc2[1]<=H-1
 
-δ1 = np.copy(π0)
-for i in range(len(δ1)):
-    δ1[i,:2] = walk(δ1[i,:2])
-fig,ax = plt.subplots(figsize=(4,4))
-show_particles(π0, ax=ax, s=4000, c='blue', alpha=.25)
-show_particles(δ1, ax=ax, s=4000, c='red', alpha=.25)
-ax.set_xlim([200,400])
-ax.set_ylim([100,300])
-plt.show()
+# δ1 = np.copy(π0)
+# for i in range(len(δ1)):
+#     δ1[i,:2] = walk(δ1[i,:2])
+# fig,ax = plt.subplots(figsize=(4,4))
+# show_particles(π0, ax=ax, s=4000, c='blue', alpha=.25)
+# show_particles(δ1, ax=ax, s=4000, c='red', alpha=.25)
+# ax.set_xlim([200,400])
+# ax.set_ylim([100,300])
+# plt.show()
+
+# particles = np.copy(π0)
+# weights = []
+
+# for n,obs in enumerate(observations[:101]):
+#     # Compute δ, the locations after a movement step
+#     for i in range(num_particles):
+#         particles[i,:2] = walk(particles[i,:2])
+#     # Compute π, the posterior after observing y
+#     w = particles[:,2]
+#     w *= np.array([pr(obs, (px,py)) for px,py,_ in particles])
+#     particles[:,2] = w / np.sum(w)
+#     weights.append(w / np.sum(w))
+#     print(f"Finished timestep {n+1}")
+
+    # Plot the current particles
+    # fig,ax = plt.subplots(figsize=(3.5,3.5))
+    # show_particles(particles, ax, s=20)
+    # ax.set_title(f"Timestep {n+1}")
+    # plt.show()
+    # clear_output(wait=True)
+
+# print(weights)
+# fig,axes = plt.subplots(5,1, figsize=(8,6), sharey=True)
+# for n,ax in zip([0,1,5,50,100],axes):
+#     w = weights[n] / np.sum(weights[n])
+#     ax.hist(w, bins=60)
+#     ax.axvline(x=1/len(particles), color='black', linewidth=4, linestyle='dashed')
+# plt.savefig('weights.png')
+# plt.show()
+
+def prune_spawn(particles):
+    # Resample according to weights
+    w = particles[:,2]
+    indices = np.random.choice(np.arange(len(particles)), size=len(particles), p=w)
+    particles[:] = particles[indices]
+    particles[:,2] = 1 / num_particles
+    # randomly replace 10% of the particles with new particles
+    num_replace = int(len(particles) * .1)
+    replace_indices = np.random.choice(np.arange(len(particles)), size=num_replace)
+    particles[replace_indices,:2] = np.random.uniform(0, [W,H], size=(num_replace,2))
 
 particles = np.copy(π0)
 
-for n,obs in enumerate(observations[:50]):
+for n,obs in enumerate(observations[:len(observations)]):
     # Compute δ, the locations after a movement step
     for i in range(num_particles):
         particles[i,:2] = walk(particles[i,:2])
     # Compute π, the posterior after observing y
     w = particles[:,2]
     w *= np.array([pr(obs, (px,py)) for px,py,_ in particles])
+    # if np.sum(w) < 0.3:
+    #     print(f"Resampling at timestep {n+1}")
+    #     particles[:,2] = w / np.sum(w)
+    #     prune_spawn(particles)
+    # else:
+    #     particles[:,2] = w / np.sum(w)
     particles[:,2] = w / np.sum(w)
+    # Prune/spawn
+    prune_spawn(particles)
 
     # Plot the current particles
     fig,ax = plt.subplots(figsize=(3.5,3.5))
+    ax.scatter(real_locations[n,0], real_locations[n,1], c='black', s=100, marker='x')
     show_particles(particles, ax, s=20)
     ax.set_title(f"Timestep {n+1}")
-    plt.show()
-    clear_output(wait=True)
+    # show figure for 1 second
+    plt.show(block=False)
+    plt.pause(1)
+    plt.close()
